@@ -7,10 +7,12 @@ KANAL_ADI = "rraenee"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 HEDEF_W, HEDEF_H = 1080, 1920
 MAKS_SURE = 59  # YouTube Shorts limiti icin guvenli sinir
+KLIP_SAYISI = 10
+CIKTI_KLASORU = "shorts_ciktilari"
 
 
-def en_iyi_klibi_bul():
-    """Kick API'sinden kanalin son kliplerini ceker, en cok izlenen klibi secer."""
+def klipleri_getir():
+    """Kick API'sinden kanalin son kliplerini ceker, izlenmeye gore siralar."""
     url = f"https://kick.com/api/v2/channels/{KANAL_ADI}/clips"
     print(f"Kick API'sine istek atiliyor: {url}")
     try:
@@ -20,20 +22,21 @@ def en_iyi_klibi_bul():
         clips = data.get("clips", [])
         if not clips:
             print("Klip listesi bos geldi.")
-            return None
+            return []
 
-        en_iyi = max(clips, key=lambda c: c.get("view_count", 0))
-        print(f"Secilen klip: '{en_iyi.get('title')}' - {en_iyi.get('view_count')} izlenme, {en_iyi.get('duration')} sn")
-        return en_iyi
+        clips_sirali = sorted(clips, key=lambda c: c.get("view_count", 0), reverse=True)
+        secilenler = clips_sirali[:KLIP_SAYISI]
+        print(f"{len(secilenler)} klip secildi (toplam {len(clips)} klip arasindan).")
+        return secilenler
     except requests.exceptions.RequestException as e:
         print(f"Kick API istegi basarisiz oldu: {e}")
-        return None
+        return []
     except ValueError as e:
         print(f"Yanit JSON olarak parse edilemedi (Cloudflare engeli olabilir): {e}")
-        return None
+        return []
 
 
-def m3u8_indir(m3u8_url, cikti_dosyasi="kick_input.mp4"):
+def m3u8_indir(m3u8_url, cikti_dosyasi):
     """ffmpeg kullanarak HLS (.m3u8) klibi duz bir mp4 dosyasina indirir."""
     print(f"ffmpeg ile klip indiriliyor: {m3u8_url}")
     komut = [
@@ -53,39 +56,69 @@ def m3u8_indir(m3u8_url, cikti_dosyasi="kick_input.mp4"):
     return True
 
 
+def klibi_shorts_yap(klip, sira_no):
+    """Tek bir klibi indirip dikey shorts formatina cevirir, dosya yolunu dondurur."""
+    video_url = klip.get("video_url") or klip.get("clip_url")
+    if not video_url:
+        print(f"[{sira_no}] Klipte video_url yok, atlaniyor.")
+        return None
+
+    ham_dosya = f"kick_input_{sira_no}.mp4"
+    if not m3u8_indir(video_url, ham_dosya):
+        return None
+
+    try:
+        print(f"[{sira_no}] '{klip.get('title')}' dikey ekrana yerlestiriliyor...")
+        orta_video = VideoFileClip(ham_dosya).resized(width=HEDEF_W)
+        orta_video = orta_video.with_position("center")
+
+        sure = min(MAKS_SURE, orta_video.duration)
+        orta_video = orta_video.subclipped(0, sure)
+
+        arka_plan = ColorClip(size=(HEDEF_W, HEDEF_H), color=(30, 30, 30)).with_duration(sure)
+        final_shorts = CompositeVideoClip([arka_plan, orta_video], size=(HEDEF_W, HEDEF_H))
+
+        cikti_yolu = os.path.join(CIKTI_KLASORU, f"rraenee_shorts_{sira_no:02d}.mp4")
+        final_shorts.write_videofile(
+            cikti_yolu,
+            fps=24,
+            codec="libx264",
+            audio_codec="aac",
+            threads=4,
+        )
+        return cikti_yolu
+    except Exception as e:
+        print(f"[{sira_no}] Video islenirken hata cikti, bu klip atlaniyor: {e}")
+        return None
+    finally:
+        if os.path.exists(ham_dosya):
+            os.remove(ham_dosya)
+
+
 def shorts_uret():
-    klip = en_iyi_klibi_bul()
-    final_shorts = None
+    os.makedirs(CIKTI_KLASORU, exist_ok=True)
+    klipler = klipleri_getir()
 
-    if klip:
-        video_url = klip.get("video_url") or klip.get("clip_url")
-        if video_url and m3u8_indir(video_url):
-            try:
-                print("Klip dikey ekrana yerlestiriliyor...")
-                orta_video = VideoFileClip("kick_input.mp4").resized(width=HEDEF_W)
-                orta_video = orta_video.with_position("center")
+    basarili_sayisi = 0
+    if klipler:
+        for i, klip in enumerate(klipler, start=1):
+            sonuc = klibi_shorts_yap(klip, i)
+            if sonuc:
+                basarili_sayisi += 1
 
-                sure = min(MAKS_SURE, orta_video.duration)
-                orta_video = orta_video.subclipped(0, sure)
-
-                arka_plan = ColorClip(size=(HEDEF_W, HEDEF_H), color=(30, 30, 30)).with_duration(sure)
-                final_shorts = CompositeVideoClip([arka_plan, orta_video], size=(HEDEF_W, HEDEF_H))
-            except Exception as e:
-                print(f"Video islenirken hata cikti, yedek sablona geciliyor: {e}")
-                final_shorts = None
-
-    if final_shorts is None:
-        print("Gecerli klip bulunamadi. Yedek renkli ekran uretiliyor...")
+    if basarili_sayisi == 0:
+        print("Hicbir klip islenemedi. Yedek renkli ekran uretiliyor...")
         final_shorts = ColorClip(size=(HEDEF_W, HEDEF_H), color=(46, 204, 113)).with_duration(5)
+        cikti_yolu = os.path.join(CIKTI_KLASORU, "rraenee_shorts_00.mp4")
+        final_shorts.write_videofile(
+            cikti_yolu,
+            fps=24,
+            codec="libx264",
+            audio_codec="aac",
+            threads=4,
+        )
 
-    final_shorts.write_videofile(
-        "rraenee_shorts.mp4",
-        fps=24,
-        codec="libx264",
-        audio_codec="aac",
-        threads=4,
-    )
-    print("Video basariyla olusturuldu!")
+    print(f"Islem tamamlandi. Toplam {basarili_sayisi} shorts videosu uretildi.")
 
 
 if __name__ == "__main__":
