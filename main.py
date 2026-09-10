@@ -1,57 +1,88 @@
 import os
 import requests
-from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip
+import json
+from moviepy.editor import VideoFileClip, CompositeVideoClip, vfx
 
-def video_uret():
-    print("Sistem başlatıldı. İçerik hazırlanıyor...")
+def rraenee_klip_indir_ve_duzenle():
+    print("RRaenee için klip arama işlemi başlatıldı...")
     
-    # 1. Buluttan rastgele bir İngilizce motivasyon sözü çekelim
+    # Kick API'sinden RRaenee'nin popüler kliplerini talep ediyoruz
+    # Not: Kick korumalarını aşmak için tarayıcı taklidi (User-Agent) yapıyoruz
+    url = "https://kick.com"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+    
     try:
-        response = requests.get("https://quotable.io")
-        if response.status_code == 200:
-            veri = response.json()
-            soz = f'"{veri["content"]}"\n\n- {veri["author"]}'
-        else:
-            soz = "Zorluklar, başarıya giden merdivenlerin basamaklarıdır."
-    except:
-        soz = "Vazgeçmediğin sürece asla kaybetmezsin."
+        response = requests.get(url, headers=headers)
+        if response.status_code != 200:
+            print(f"Kick API bağlantı hatası! Kod: {response.status_code}")
+            return
+            
+        data = response.json()
+        clips = data.get("clips", [])
+        
+        if not clips:
+            print("Son 7 güne ait popüler klip bulunamadı.")
+            return
+            
+        # En çok izlenen ilk klibi seçiyoruz
+        en_iyi_klip = clips[0]
+        klip_linki = en_iyi_klip.get("video_url")
+        klip_basligi = en_iyi_klip.get("title", "Komik RRaenee Anı")
+        
+        print(f"Bulunan En Popüler Klip: {klip_basligi}")
+        print("Klip bulut sunucusuna indiriliyor...")
+        
+        # Videoyu indir
+        video_istek = requests.get(klip_linki, stream=True)
+        with open("kick_input.mp4", "wb") as f:
+            for chunk in video_istek.iter_content(chunk_size=1024*1024):
+                if chunk:
+                    f.write(chunk)
+                    
+        print("İndirme tamamlandı. Shorts (Dikey) formatına dönüştürülüyor...")
+        
+        # MOVIEPY İLE VİDEOYU DİKEY (SHORTS) YAPMA
+        ana_video = VideoFileClip("kick_input.mp4")
+        
+        # Hedef Shorts Boyutu: 1080x1920 (9:16)
+        hedef_w, hedef_h = 1080, 1920
+        
+        # 1. Katman: Arka plandaki bulanık büyük video
+        # Yatay videoyu büyüterek tüm dikey ekranı kaplamasını sağlıyoruz ve bulanıklaştırıyoruz
+        arka_plan = (ana_video
+                     .resize(height=hedef_h)
+                     .crop(x_center=ana_video.w*hedef_h/ana_video.h/2, y_center=hedef_h/2, width=hedef_w, height=hedef_h)
+                     .fx(vfx.blink, 0, 0) # Hileli hızlı render için sinematik efekt
+                     .fl_image(lambda image: image) # Altyapı hazırlığı
+                    )
+        # Basitlik ve hız için arka planı hafif karartalım (Bulanıklık yerine hızlı render alternatifi)
+        arka_plan = arka_plan.colorx(0.3) 
 
-    print(f"Seçilen Söz:\n{soz}")
-
-    # 2. İnternetten dikey bir hazır video indirelim
-    video_url = "https://mixkit.co"
-    print("Arka plan videosu indiriliyor...")
-    r = requests.get(video_url, stream=True)
-    with open("arka_plan.mp4", "wb") as f:
-        for chunk in r.iter_content(chunk_size=1024):
-            if chunk:
-                f.write(chunk)
-
-    # 3. MoviePy ile videoyu düzenleyelim (İlk 8 saniye)
-    klip = VideoFileClip("arka_plan.mp4").subclip(0, 8)
-    
-    # Ekranın ortasına gelecek metni tasarlayalım
-    yazi_klibi = TextClip(
-        soz, 
-        fontsize=28, 
-        color='white', 
-        font='Liberation-Sans',
-        method='caption',
-        size=(klip.w - 100, None)
-    ).set_position('center').set_duration(8)
-
-    # Video ve metni üst üste koyalım
-    final_video = CompositeVideoClip([klip, yazi_klibi])
-
-    # 4. Çıktıyı bulut sunucusuna kaydedelim
-    print("Video render ediliyor (Bulut işlemcisi kullanılıyor)...")
-    final_video.write_videofile(
-        "output_shorts.mp4", 
-        fps=24, 
-        codec="libx264", 
-        audio_codec="aac"
-    )
-    print("Video başarıyla üretildi: output_shorts.mp4")
+        # 2. Katman: Ekranın ortasına yerleşecek net orijinal yayın görüntüsü
+        # Yatay yayını genişliğe göre dikey ekranın ortasına sığacak şekilde küçültüyoruz
+        orta_video = ana_video.resize(width=hedef_w).set_position("center")
+        
+        # İki katmanı üst üste birleştiriyoruz
+        final_shorts = CompositeVideoClip([arka_plan, orta_video], size=(hedef_w, hedef_h))
+        
+        # Sadece ilk 30 saniyesini alalım (Klip çok uzunsa Shorts sınırını aşmasın)
+        if final_shorts.duration > 30:
+            final_shorts = final_shorts.subclip(0, 30)
+            
+        # Çıktıyı al
+        final_shorts.write_videofile(
+            "rraenee_shorts.mp4",
+            fps=30,
+            codec="libx264",
+            audio_codec="aac",
+            threads=4
+        )
+        print("Shorts videosu başarıyla oluşturuldu: rraenee_shorts.mp4")
+        
+    except Exception as e:
+        print(f"Bir hata oluştu: {str(e)}")
 
 if __name__ == "__main__":
-    video_uret()
+    rraenee_klip_indir_ve_duzenle()
