@@ -28,6 +28,10 @@ jobs:
         pip install --upgrade pip
         pip install -r requirements.txt
 
+    # GİZLİ TARAYICI MOTORUNU BULUT BİLGİSAYARINA KURAN YENİ ADIM
+    - name: Playwright Tarayıcı Motorunu Kur
+      run: playwright install chromium
+
     - name: RRaenee Kliplerini Topla ve Render Et
       run: python main.py
 
