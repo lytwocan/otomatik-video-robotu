@@ -1,7 +1,7 @@
 import os
 import subprocess
 import requests
-from moviepy.editor import VideoFileClip, CompositeVideoClip, ColorClip
+from moviepy import VideoFileClip, CompositeVideoClip, ColorClip
 
 KANAL_ADI = "rraenee"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -22,8 +22,6 @@ def en_iyi_klibi_bul():
             print("Klip listesi bos geldi.")
             return None
 
-        # En cok izlenen klibi sec (istersen en yeniyi almak icin clips[0] kullan,
-        # liste zaten created_at'e gore azalan sirada geliyor)
         en_iyi = max(clips, key=lambda c: c.get("view_count", 0))
         print(f"Secilen klip: '{en_iyi.get('title')}' - {en_iyi.get('view_count')} izlenme, {en_iyi.get('duration')} sn")
         return en_iyi
@@ -31,7 +29,6 @@ def en_iyi_klibi_bul():
         print(f"Kick API istegi basarisiz oldu: {e}")
         return None
     except ValueError as e:
-        # JSON parse hatasi - genelde Cloudflare challenge sayfasi donuyor demektir
         print(f"Yanit JSON olarak parse edilemedi (Cloudflare engeli olabilir): {e}")
         return None
 
