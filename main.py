@@ -1,41 +1,95 @@
-name: Gunluk Video Uretim Robotu
+import os
+import subprocess
+import requests
+from moviepy.editor import VideoFileClip, CompositeVideoClip, ColorClip
 
-on:
-  schedule:
-    - cron: '0 17 * * *'
-  workflow_dispatch:
+KANAL_ADI = "rraenee"
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+HEDEF_W, HEDEF_H = 1080, 1920
+MAKS_SURE = 59  # YouTube Shorts limiti icin guvenli sinir
 
-jobs:
-  build-and-render:
-    runs-on: ubuntu-latest
 
-    steps:
-    - name: Depoyu Klonla
-      uses: actions/checkout@v4
+def en_iyi_klibi_bul():
+    """Kick API'sinden kanalin son kliplerini ceker, en cok izlenen klibi secer."""
+    url = f"https://kick.com/api/v2/channels/{KANAL_ADI}/clips"
+    print(f"Kick API'sine istek atiliyor: {url}")
+    try:
+        resp = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+        clips = data.get("clips", [])
+        if not clips:
+            print("Klip listesi bos geldi.")
+            return None
 
-    - name: Python Kur
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
+        # En cok izlenen klibi sec (istersen en yeniyi almak icin clips[0] kullan,
+        # liste zaten created_at'e gore azalan sirada geliyor)
+        en_iyi = max(clips, key=lambda c: c.get("view_count", 0))
+        print(f"Secilen klip: '{en_iyi.get('title')}' - {en_iyi.get('view_count')} izlenme, {en_iyi.get('duration')} sn")
+        return en_iyi
+    except requests.exceptions.RequestException as e:
+        print(f"Kick API istegi basarisiz oldu: {e}")
+        return None
+    except ValueError as e:
+        # JSON parse hatasi - genelde Cloudflare challenge sayfasi donuyor demektir
+        print(f"Yanit JSON olarak parse edilemedi (Cloudflare engeli olabilir): {e}")
+        return None
 
-    - name: Sistem Gereksinimlerini Yukle
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y ffmpeg
 
-    - name: Kütüphaneleri Yukle
-      run: |
-        pip install --upgrade pip
-        pip install -r requirements.txt
+def m3u8_indir(m3u8_url, cikti_dosyasi="kick_input.mp4"):
+    """ffmpeg kullanarak HLS (.m3u8) klibi duz bir mp4 dosyasina indirir."""
+    print(f"ffmpeg ile klip indiriliyor: {m3u8_url}")
+    komut = [
+        "ffmpeg", "-y",
+        "-user_agent", USER_AGENT,
+        "-i", m3u8_url,
+        "-c", "copy",
+        cikti_dosyasi,
+    ]
+    sonuc = subprocess.run(komut, capture_output=True, text=True)
+    if sonuc.returncode != 0:
+        print(f"ffmpeg indirme hatasi:\n{sonuc.stderr[-1500:]}")
+        return False
+    if not os.path.exists(cikti_dosyasi) or os.path.getsize(cikti_dosyasi) == 0:
+        print("Indirilen dosya bos veya olusmadi.")
+        return False
+    return True
 
-    - name: Playwright Tarayıcı Motorunu Kur
-      run: playwright install --with-deps chromium
 
-    - name: RRaenee Kliplerini Topla ve Render Et
-      run: python main.py
+def shorts_uret():
+    klip = en_iyi_klibi_bul()
+    final_shorts = None
 
-    - name: Hazır Shorts Videosunu Sisteme Yukle
-      uses: actions/upload-artifact@v4
-      with:
-        name: rraenee-komik-klip
-        path: rraenee_shorts.mp4
+    if klip:
+        video_url = klip.get("video_url") or klip.get("clip_url")
+        if video_url and m3u8_indir(video_url):
+            try:
+                print("Klip dikey ekrana yerlestiriliyor...")
+                orta_video = VideoFileClip("kick_input.mp4").resize(width=HEDEF_W)
+                orta_video = orta_video.set_position("center")
+
+                sure = min(MAKS_SURE, orta_video.duration)
+                orta_video = orta_video.subclip(0, sure)
+
+                arka_plan = ColorClip(size=(HEDEF_W, HEDEF_H), color=(30, 30, 30)).set_duration(sure)
+                final_shorts = CompositeVideoClip([arka_plan, orta_video], size=(HEDEF_W, HEDEF_H))
+            except Exception as e:
+                print(f"Video islenirken hata cikti, yedek sablona geciliyor: {e}")
+                final_shorts = None
+
+    if final_shorts is None:
+        print("Gecerli klip bulunamadi. Yedek renkli ekran uretiliyor...")
+        final_shorts = ColorClip(size=(HEDEF_W, HEDEF_H), color=(46, 204, 113)).set_duration(5)
+
+    final_shorts.write_videofile(
+        "rraenee_shorts.mp4",
+        fps=24,
+        codec="libx264",
+        audio_codec="aac",
+        threads=4,
+    )
+    print("Video basariyla olusturuldu!")
+
+
+if __name__ == "__main__":
+    shorts_uret()
