@@ -1,0 +1,47 @@
+name: Gunluk Video Uretim Robotu
+
+on:
+  schedule:
+    # Her gün Türkiye saati ile akşam 20:00'de (UTC 17:00) otomatik çalışır
+    - cron: '0 17 * * *'
+  workflow_dispatch: # Bu satır, sistemi elle (butonla) test etmemizi sağlar
+
+jobs:
+  build-and-render:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. Kodları bulut sunucusuna çek
+    - name: Depoyu Klonla
+      uses: actions/checkout@v3
+
+    # 2. Bulut sunucusuna Python kur
+    - name: Python Kur
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    # 3. Video düzenleme için Linux altyapısını ve yazı fontlarını kur
+    - name: Sistem Gereksinimlerini Yükle (FFmpeg & ImageMagick)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg imagemagick fonts-liberation
+        # ImageMagick güvenlik politikasını MoviePy'ın yazı yazabilmesi için güncelliyoruz
+        sudo sed -i 's/domain="path" rights="none"/domain="path" rights="read|write"/g' /etc/ImageMagick-6/policy.xml
+
+    # 4. Gerekli Python kütüphanelerini yükle
+    - name: Python Kütüphanelerini Yükle
+      run: |
+        pip install --upgrade pip
+        pip install -r requirements.txt
+
+    # 5. Yazdığımız scripti çalıştır (Video render işlemi burada başlar)
+    - name: Videoyu Render Et
+      run: python main.py
+
+    # 6. Üretilen videoyu GitHub'dan indirilebilir hale getir
+    - name: Videoyu Sisteme Yukle (Artifact)
+      uses: actions/upload-artifact@v4
+      with:
+        name: gunluk-shorts-videosu
+        path: output_shorts.mp4
