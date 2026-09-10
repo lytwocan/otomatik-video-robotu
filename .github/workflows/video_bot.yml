@@ -28,9 +28,6 @@ jobs:
         pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Playwright Tarayıcı Motorunu Kur
-      run: playwright install --with-deps chromium
-
     - name: RRaenee Kliplerini Topla ve Render Et
       run: python main.py
 
