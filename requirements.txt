@@ -1,2 +1,2 @@
 requests
-moviepy
+moviepy==2.1.2
