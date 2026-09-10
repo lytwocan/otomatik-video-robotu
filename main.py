@@ -38,7 +38,7 @@ def rraenee_klip_indir_ve_duzenle():
         print("Son 7 güne ait popüler klip bulunamadı. Alternatif aranıyor...")
         return
         
-    en_iyi_klip = clips[0]
+    en_iyi_klip = clips[0] # Listenin ilk elemanını alıyoruz
     klip_linki = en_iyi_klip.get("video_url")
     klip_basligi = en_iyi_klip.get("title", "Komik RRaenee Ani")
     
@@ -67,7 +67,8 @@ def rraenee_klip_indir_ve_duzenle():
     # Ortadaki net video katmanı
     orta_video = ana_video.resize(width=hedef_w).set_position("center")
     
-    final_shorts = CompositeVideoClip([arka_plan, orta_video], size=(hedef_w,深度=hedef_h))
+    # SADECE BURADAKİ YAZIM HATASI DÜZELTİLDİ: size=(hedef_w, hedef_h) yapıldı
+    final_shorts = CompositeVideoClip([arka_plan, orta_video], size=(hedef_w, hedef_h))
     
     if final_shorts.duration > 30:
         final_shorts = final_shorts.subclip(0, 30)
