@@ -31,8 +31,8 @@ jobs:
     - name: RRaenee Kliplerini Topla ve Render Et
       run: python main.py
 
-    - name: Hazır Shorts Videosunu Sisteme Yukle
+    - name: Hazır Shorts Videolarını Sisteme Yukle
       uses: actions/upload-artifact@v4
       with:
-        name: rraenee-komik-klip
-        path: rraenee_shorts.mp4
+        name: rraenee-komik-klipler
+        path: shorts_ciktilari/*.mp4
