@@ -11,10 +11,10 @@ jobs:
 
     steps:
     - name: Depoyu Klonla
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Python Kur
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.10'
 
@@ -28,9 +28,8 @@ jobs:
         pip install --upgrade pip
         pip install -r requirements.txt
 
-    # GİZLİ TARAYICI MOTORUNU BULUT BİLGİSAYARINA KURAN YENİ ADIM
     - name: Playwright Tarayıcı Motorunu Kur
-      run: playwright install chromium
+      run: playwright install --with-deps chromium
 
     - name: RRaenee Kliplerini Topla ve Render Et
       run: python main.py
