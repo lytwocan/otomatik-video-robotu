@@ -62,13 +62,13 @@ def shorts_uret():
         if video_url and m3u8_indir(video_url):
             try:
                 print("Klip dikey ekrana yerlestiriliyor...")
-                orta_video = VideoFileClip("kick_input.mp4").resize(width=HEDEF_W)
-                orta_video = orta_video.set_position("center")
+                orta_video = VideoFileClip("kick_input.mp4").resized(width=HEDEF_W)
+                orta_video = orta_video.with_position("center")
 
                 sure = min(MAKS_SURE, orta_video.duration)
-                orta_video = orta_video.subclip(0, sure)
+                orta_video = orta_video.subclipped(0, sure)
 
-                arka_plan = ColorClip(size=(HEDEF_W, HEDEF_H), color=(30, 30, 30)).set_duration(sure)
+                arka_plan = ColorClip(size=(HEDEF_W, HEDEF_H), color=(30, 30, 30)).with_duration(sure)
                 final_shorts = CompositeVideoClip([arka_plan, orta_video], size=(HEDEF_W, HEDEF_H))
             except Exception as e:
                 print(f"Video islenirken hata cikti, yedek sablona geciliyor: {e}")
@@ -76,7 +76,7 @@ def shorts_uret():
 
     if final_shorts is None:
         print("Gecerli klip bulunamadi. Yedek renkli ekran uretiliyor...")
-        final_shorts = ColorClip(size=(HEDEF_W, HEDEF_H), color=(46, 204, 113)).set_duration(5)
+        final_shorts = ColorClip(size=(HEDEF_W, HEDEF_H), color=(46, 204, 113)).with_duration(5)
 
     final_shorts.write_videofile(
         "rraenee_shorts.mp4",
